@@ -4,9 +4,15 @@ on:
   push:
     paths:
       - "scenes/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "scenes/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - ".github/workflows/**"
   workflow_dispatch:
     inputs:
       scene:
