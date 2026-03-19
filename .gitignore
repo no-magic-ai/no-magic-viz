@@ -4,15 +4,11 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# Manim
+# Manim working directory
 media/
-*.mp4
-*.gif
-*.png
 
-# Rendered outputs (tracked via releases, not git)
+# Full renders (local only, too large for git)
 renders/
-previews/
 
 # OS
 .DS_Store

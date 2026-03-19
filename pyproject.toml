@@ -22,5 +22,6 @@ target-version = "py310"
 select = ["E", "F", "I", "W"]
 
 [tool.ruff.lint.per-file-ignores]
-# Manim's API requires star imports — all scene symbols come from `from manim import *`
-"scenes/*.py" = ["F403", "F405"]
+# Manim scenes: star imports required, long constructor lines are normal,
+# single-char loop vars (l, x) are standard in animation code
+"scenes/*.py" = ["F403", "F405", "E501", "E741", "F841"]

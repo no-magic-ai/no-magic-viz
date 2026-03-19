@@ -20,6 +20,7 @@ NM_YELLOW = "#f5c542"
 NM_ORANGE = "#e97d32"
 NM_PURPLE = "#9b59b6"
 
+# Resolve asset paths relative to the repo root (one level up from scenes/)
 _ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 START_FRAME = str(_ASSETS_DIR / "video_start_frame.png")
 END_FRAME = str(_ASSETS_DIR / "video_end_frame.png")
@@ -31,7 +32,7 @@ class NoMagicScene(Scene):
     Subclasses set title_text and subtitle_text as class attributes,
     then implement animate() for the algorithm-specific visualization.
 
-    Frame sequence: branded start frame -> algorithm title -> animation -> branded end frame
+    Frame sequence: branded start frame → algorithm title → animation → branded end frame
     """
 
     title_text: str = "Algorithm"
@@ -46,32 +47,27 @@ class NoMagicScene(Scene):
 
     def show_start_frame(self):
         """Display the branded start frame PNG for 2.5 seconds, then fade out."""
-        if Path(START_FRAME).exists():
-            img = ImageMobject(START_FRAME).scale_to_fit_width(config.frame_width)
-            self.add(img)
-            self.wait(2.5)
-            self.play(FadeOut(img))
-        else:
-            self.wait(0.5)
+        frame = ImageMobject(START_FRAME)
+        frame.height = config.frame_height
+        self.play(FadeIn(frame), run_time=0.8)
+        self.wait(2.0)
+        self.play(FadeOut(frame), run_time=0.6)
 
     def show_title(self):
-        """Display algorithm title and subtitle, then fade out."""
-        title = Text(self.title_text, font_size=48, color=NM_TEXT)
+        """Show the algorithm-specific title card over the dark background."""
+        title = Text(self.title_text, font_size=48, color=NM_TEXT, weight=BOLD)
         subtitle = Text(self.subtitle_text, font_size=24, color=NM_PRIMARY)
-        group = VGroup(title, subtitle).arrange(DOWN, buff=0.4)
-        self.play(FadeIn(group))
-        self.wait(2)
-        self.play(FadeOut(group))
+        subtitle.next_to(title, DOWN, buff=0.3)
+        self.play(Write(title), FadeIn(subtitle, shift=UP * 0.2), run_time=1.2)
+        self.wait(1.5)
+        self.play(FadeOut(title), FadeOut(subtitle), run_time=0.6)
 
     def show_end_frame(self):
         """Display the branded end frame PNG for 3 seconds."""
-        if Path(END_FRAME).exists():
-            img = ImageMobject(END_FRAME).scale_to_fit_width(config.frame_width)
-            self.play(FadeIn(img))
-            self.wait(3)
-        else:
-            self.wait(1)
+        frame = ImageMobject(END_FRAME)
+        frame.height = config.frame_height
+        self.play(FadeIn(frame), run_time=0.8)
+        self.wait(2.5)
 
     def animate(self):
-        """Override in subclasses with algorithm-specific animation logic."""
         raise NotImplementedError("Subclasses must implement animate()")
