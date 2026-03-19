@@ -1,0 +1,44 @@
+name: Render Scenes
+
+on:
+  push:
+    paths:
+      - "scenes/**"
+  pull_request:
+    paths:
+      - "scenes/**"
+  workflow_dispatch:
+    inputs:
+      scene:
+        description: "Scene to render (blank = all)"
+        required: false
+        type: string
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check scenes/
+
+  render-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev ffmpeg
+          pip install manim
+      - name: Syntax check all scenes
+        run: |
+          for scene in scenes/scene_*.py; do
+            python -m py_compile "$scene" || exit 1
+          done

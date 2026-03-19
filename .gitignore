@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Manim
+media/
+*.mp4
+*.gif
+*.png
+
+# Rendered outputs (tracked via releases, not git)
+renders/
+previews/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
