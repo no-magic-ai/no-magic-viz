@@ -9,7 +9,6 @@ from pathlib import Path
 
 from manim import *
 
-
 # no-magic color palette — matches GitHub dark mode aesthetics
 NM_BG = "#1a1a2e"
 NM_PRIMARY = "#e94560"

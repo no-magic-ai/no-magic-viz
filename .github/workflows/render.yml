@@ -45,6 +45,12 @@ jobs:
           pip install manim
       - name: Syntax check all scenes
         run: |
-          for scene in scenes/scene_*.py; do
+          shopt -s nullglob
+          files=(scenes/scene_*.py)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No scene files found — skipping syntax check"
+            exit 0
+          fi
+          for scene in "${files[@]}"; do
             python -m py_compile "$scene" || exit 1
           done
