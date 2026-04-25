@@ -17,3 +17,13 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Agentic Systems
+.agent
+.claude/
+.gemini
+.opencode/
+.serena/
+
+# Developer workspace
+.docs/
