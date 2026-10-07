@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.10",
     "ruff>=0.4.0",
 ]
 
@@ -25,3 +26,8 @@ select = ["E", "F", "I", "W"]
 # Manim scenes: star imports required, long constructor lines are normal,
 # single-char loop vars (l, x) are standard in animation code
 "scenes/*.py" = ["F403", "F405", "E501", "E741", "F841"]
+
+[tool.mypy]
+# Scenes import the shared base as a top-level module (`from base import ...`),
+# matching how manim loads scene files; type-check them as top-level modules.
+mypy_path = "$MYPY_CONFIG_FILE_DIR/scenes"
