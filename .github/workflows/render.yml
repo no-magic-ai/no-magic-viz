@@ -11,7 +11,8 @@ on:
       - "uv.lock"
       - ".github/workflows/**"
   pull_request:
-    # "edited" covers a pull request retargeted to a different base branch.
+    # "edited" re-verifies a pull request retargeted to a different base branch; title
+    # and body edits also run the full job.
     types: [opened, synchronize, reopened, edited]
     paths:
       - "scenes/**"
@@ -27,8 +28,6 @@ permissions:
 
 jobs:
   verify:
-    # Title/body edits do not change what to render; only a base change does.
-    if: github.event.action != 'edited' || github.event.changes.base != null
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -99,31 +98,52 @@ jobs:
             base=$(git merge-base "origin/$DEFAULT_BRANCH" "$head_sha")
           fi
           echo "Comparing $base..$head_sha"
-          git diff --name-only --diff-filter=ACMRT "$base" "$head_sha" >"$RUNNER_TEMP/changed.txt"
+          # Every status, with renames split into deletion + addition, NUL-delimited so
+          # paths reach the checks below byte for byte.
+          git diff -z --name-only --no-renames "$base" "$head_sha" >"$RUNNER_TEMP/changed.z"
 
           names=()
           shared=false
-          while IFS= read -r path; do
+          while IFS= read -r -d '' path; do
             case "$path" in
               scenes/scene_*.py)
                 name="${path#scenes/scene_}"
-                names+=("${name%.py}")
+                name="${name%.py}"
+                if ! [[ "$name" =~ ^[A-Za-z0-9_]+$ ]]; then
+                  printf 'unsupported scene file name: %q\n' "$path" >&2
+                  exit 1
+                fi
+                if [ -f "$path" ] && [ ! -L "$path" ]; then
+                  names+=("$name")
+                elif [ -e "$path" ] || [ -L "$path" ]; then
+                  printf 'scene path is not a regular file: %q\n' "$path" >&2
+                  exit 1
+                else
+                  echo "Deleted scene, not rendered: $path"
+                fi
                 ;;
               assets/* | scenes/base.py | scripts/* | pyproject.toml | uv.lock | .github/workflows/*)
                 shared=true
                 ;;
             esac
-          done <"$RUNNER_TEMP/changed.txt"
+          done <"$RUNNER_TEMP/changed.z"
           # Shared renderer inputs affect every scene; render microgpt as the representative.
           if [ "$shared" = true ]; then
             names+=(microgpt)
           fi
 
+          selected=()
+          if [ "${#names[@]}" -gt 0 ]; then
+            printf '%s\0' "${names[@]}" | LC_ALL=C sort -zu >"$RUNNER_TEMP/selected.z"
+            while IFS= read -r -d '' name; do
+              selected+=("$name")
+            done <"$RUNNER_TEMP/selected.z"
+          fi
+
           scenes=""
           paths=""
           needs_tex=false
-          for name in $(printf '%s\n' ${names[@]+"${names[@]}"} | sort -u); do
-            [[ "$name" =~ ^[A-Za-z0-9_]+$ ]] || { echo "invalid scene name: $name" >&2; exit 1; }
+          for name in ${selected[@]+"${selected[@]}"}; do
             scenes="$scenes $name"
             paths="$paths"$'\n'"previews/$name.gif"$'\n'"renders/$name.mp4"
             if grep -qE '\b(Tex|MathTex|SingleStringMathTex|Title|BulletedList|DecimalNumber|Integer|Variable|Matrix|IntegerMatrix|DecimalMatrix|MobjectMatrix|BraceLabel|BraceText)\(|include_numbers|add_coordinates|get_axis_labels|get_graph_label' "scenes/scene_$name.py"; then
