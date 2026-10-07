@@ -5,46 +5,179 @@ on:
     paths:
       - "scenes/**"
       - "scripts/**"
+      - "tests/**"
+      - "assets/**"
       - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/**"
   pull_request:
+    # "edited" re-verifies a pull request retargeted to a different base branch; title
+    # and body edits also run the full job.
+    types: [opened, synchronize, reopened, edited]
     paths:
       - "scenes/**"
       - "scripts/**"
+      - "tests/**"
+      - "assets/**"
       - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/**"
 
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check scenes/ scripts/
+permissions:
+  contents: read
 
-  syntax-check:
-    runs-on: ubuntu-latest
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+
+      - name: Install system render tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev libpango1.0-dev pkg-config ffmpeg gifsicle
+
+      - name: Install locked environment
+        run: uv sync --locked --extra dev
+
+      - name: Lint
+        run: uv run --locked --extra dev ruff check scenes/ scripts/ tests/
+
+      - name: Format
+        run: uv run --locked --extra dev ruff format --check scenes/base.py scenes/scene_microgpt.py tests/
+
+      - name: Type check
+        run: |
+          uv run --locked --extra dev mypy --strict -m base -m scene_microgpt
+          uv run --locked --extra dev mypy --strict tests/
+
       - name: Syntax check all Python files
         run: |
           shopt -s nullglob
-          files=(scenes/*.py scripts/*.py)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No Python files found — skipping"
-            exit 0
-          fi
+          files=(scenes/*.py tests/*.py)
           status=0
           for f in "${files[@]}"; do
-            if ! python -m py_compile "$f" 2>&1; then
+            if ! uv run --locked --extra dev python -m py_compile "$f"; then
               echo "FAIL: $f"
               status=1
             fi
           done
           exit $status
+
+      - name: Render script tests
+        run: uv run --locked --extra dev python -m unittest discover -s tests -v
+
+      - name: Select changed scenes
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          head_sha=$(git rev-parse HEAD)
+          if [ "$EVENT_NAME" = pull_request ]; then
+            # Changes this pull request makes on top of its current base branch.
+            base=$(git merge-base "$PR_BASE_SHA" "$head_sha")
+          elif [ "$PUSH_BEFORE" != 0000000000000000000000000000000000000000 ] &&
+            git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            base="$PUSH_BEFORE"
+          else
+            # First push of a branch (zero "before") or a force push whose previous
+            # tip is no longer in history: compare with the default branch.
+            base=$(git merge-base "origin/$DEFAULT_BRANCH" "$head_sha")
+          fi
+          echo "Comparing $base..$head_sha"
+          # Every status, with renames split into deletion + addition, NUL-delimited so
+          # paths reach the checks below byte for byte.
+          git diff -z --name-only --no-renames "$base" "$head_sha" >"$RUNNER_TEMP/changed.z"
+
+          names=()
+          shared=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              scenes/scene_*.py)
+                name="${path#scenes/scene_}"
+                name="${name%.py}"
+                if ! [[ "$name" =~ ^[A-Za-z0-9_]+$ ]]; then
+                  printf 'unsupported scene file name: %q\n' "$path" >&2
+                  exit 1
+                fi
+                if [ -f "$path" ] && [ ! -L "$path" ]; then
+                  names+=("$name")
+                elif [ -e "$path" ] || [ -L "$path" ]; then
+                  printf 'scene path is not a regular file: %q\n' "$path" >&2
+                  exit 1
+                else
+                  echo "Deleted scene, not rendered: $path"
+                fi
+                ;;
+              assets/* | scenes/base.py | scripts/* | pyproject.toml | uv.lock | .github/workflows/*)
+                shared=true
+                ;;
+            esac
+          done <"$RUNNER_TEMP/changed.z"
+          # Shared renderer inputs affect every scene; render microgpt as the representative.
+          if [ "$shared" = true ]; then
+            names+=(microgpt)
+          fi
+
+          selected=()
+          if [ "${#names[@]}" -gt 0 ]; then
+            printf '%s\0' "${names[@]}" | LC_ALL=C sort -zu >"$RUNNER_TEMP/selected.z"
+            while IFS= read -r -d '' name; do
+              selected+=("$name")
+            done <"$RUNNER_TEMP/selected.z"
+          fi
+
+          scenes=""
+          paths=""
+          needs_tex=false
+          for name in ${selected[@]+"${selected[@]}"}; do
+            scenes="$scenes $name"
+            paths="$paths"$'\n'"previews/$name.gif"$'\n'"renders/$name.mp4"
+            if grep -qE '\b(Tex|MathTex|SingleStringMathTex|Title|BulletedList|DecimalNumber|Integer|Variable|Matrix|IntegerMatrix|DecimalMatrix|MobjectMatrix|BraceLabel|BraceText)\(|include_numbers|add_coordinates|get_axis_labels|get_graph_label' "scenes/scene_$name.py"; then
+              needs_tex=true
+            fi
+          done
+          echo "Selected scenes:${scenes:- none}"
+          echo "Needs LaTeX: $needs_tex"
+          {
+            echo "scenes=${scenes# }"
+            echo "needs_tex=$needs_tex"
+            echo "paths<<EOF_PATHS"
+            echo "${paths#$'\n'}"
+            echo "EOF_PATHS"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Install LaTeX for selected scenes
+        if: steps.select.outputs.needs_tex == 'true'
+        run: sudo apt-get install -y --no-install-recommends texlive texlive-latex-extra dvisvgm
+
+      - name: Render selected scenes
+        if: steps.select.outputs.scenes != ''
+        env:
+          SCENES: ${{ steps.select.outputs.scenes }}
+        run: |
+          for name in $SCENES; do
+            uv run --locked --extra dev bash scripts/render.sh "$name"
+          done
+
+      - name: Upload rendered scenes
+        if: steps.select.outputs.scenes != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rendered-scenes
+          path: ${{ steps.select.outputs.paths }}
+          if-no-files-found: error
+          retention-days: 14

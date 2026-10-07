@@ -43,7 +43,7 @@ Rendering also needs these system tools on `PATH`:
 
 ## Rendering
 
-All rendering happens locally before push. CI only runs lint and syntax checks.
+Previews are rendered locally and committed. CI renders changed scenes to check them but does not commit its outputs (see [CI](#ci)).
 
 ```bash
 # All scenes (MP4 + GIF)
@@ -94,6 +94,19 @@ uv run --extra dev python -m unittest discover -s tests
 ```
 
 `mypy` resolves `scenes/` as its search path (`[tool.mypy]` in `pyproject.toml`), so `base` and `scene_microgpt` are checked as the top-level modules that scenes import at render time. The tests render small scenes with the real system tools listed above.
+
+## CI
+
+`.github/workflows/render.yml` runs on pushes and pull requests that touch scenes, scripts, tests, assets, `pyproject.toml`, `uv.lock` or workflows. On Ubuntu 24.04 with the locked environment on Python 3.12, it runs the [checks](#checks) and the render tests, then renders the selected scenes one at a time with `bash scripts/render.sh <name>` (MP4 and GIF).
+
+Scene selection compares the commit under test with:
+
+- a pull request: the merge base with its current base branch. Every `edited` event, including a retarget to a different base branch and a title or body edit, runs the full job again;
+- a push: the previous tip of the branch, or, on the first push of a branch or after a force push that removed the previous tip, the merge base with the default branch.
+
+Every changed `scenes/scene_<name>.py` that still exists at the commit under test is selected; a deleted scene is not rendered, and a renamed scene is selected under its new name. Any change to `assets/`, `scenes/base.py`, `scripts/`, `pyproject.toml`, `uv.lock` or `.github/workflows/`, including deleting or moving a file out of those paths, also selects `microgpt` as a representative scene instead of re-rendering all scenes. A changed scene file whose name is not `scene_` followed by letters, digits and underscores, or that is not a regular file, fails the job before anything is rendered. CI installs LaTeX and `dvisvgm` only when a selected scene's source uses a LaTeX-backed Manim class; if that detection misses one, Manim fails and the job fails.
+
+The `rendered-scenes` artifact holds only `previews/<name>.gif` and `renders/<name>.mp4` for the scenes selected and rendered in that run, kept for 14 days. The job reads the repository with read-only permissions and uses no secrets.
 
 ## Adding a New Scene
 
