@@ -13,7 +13,8 @@
 #   previews/<name>.gif  400x225, 10 fps, optimized palette (full scene)
 #
 # Every output is rendered into a fresh staging directory under media/, then
-# decoded with `ffmpeg -xerror` and probed with ffprobe. Only a scene whose
+# decoded with `ffmpeg -xerror` and probed with ffprobe. A preview's duration must
+# also match the 480p15 render it was made from. Only a scene whose
 # selected outputs all pass is moved into renders/ and previews/. The first
 # failure stops the batch with a nonzero exit; outputs promoted for earlier
 # scenes and all other existing files are left in place.
@@ -26,7 +27,15 @@ FULL_HEIGHT=1080
 FULL_RATE=60/1
 PREVIEW_WIDTH=400
 PREVIEW_HEIGHT=225
-PREVIEW_RATE=10/1
+PREVIEW_FPS=10
+PREVIEW_RATE=$PREVIEW_FPS/1
+PREVIEW_SOURCE_WIDTH=854
+PREVIEW_SOURCE_HEIGHT=480
+PREVIEW_SOURCE_FPS=15
+PREVIEW_SOURCE_RATE=$PREVIEW_SOURCE_FPS/1
+# Resampling the 15 fps source to 10 fps can shift the GIF's end by up to one frame
+# interval of each rate (100 ms + 67 ms, rounded up); anything further is a broken preview.
+PREVIEW_TIMELINE_TOLERANCE_MS=$(((1000 + PREVIEW_FPS - 1) / PREVIEW_FPS + (1000 + PREVIEW_SOURCE_FPS - 1) / PREVIEW_SOURCE_FPS))
 
 die() {
     echo "render.sh: error: $1" >&2
@@ -141,6 +150,8 @@ render_scene() {
 }
 
 # Fully decode a file and check its probed stream against the expected mode.
+# Sets validated_ms to the probed duration in whole milliseconds.
+validated_ms=0
 validate_media() {
     local file="$1" want_width="$2" want_height="$3" want_rate="$4"
     local log="$STAGE/validate.log" key value
@@ -186,6 +197,9 @@ validate_media() {
     if ! [[ "$duration" =~ ^[0-9]*\.?[0-9]+$ ]] || [[ "$duration" =~ ^[0.]+$ ]]; then
         die "$file has no positive duration ('$duration')"
     fi
+    local whole="${duration%%.*}" fraction="000"
+    [[ "$duration" != *.* ]] || fraction="${duration#*.}000"
+    validated_ms=$((10#${whole:-0} * 1000 + 10#${fraction:0:3}))
     echo "  OK: ${file##*/} ${width}x$height $rate fps, $frames frames, ${duration}s"
 }
 
@@ -194,7 +208,7 @@ optimize_gif() {
     local name="$1" source_mp4="$2" out_gif="$3"
     local palette_gif="$STAGE/$name/palette.gif"
     if ! ffmpeg -nostdin -hide_banner -v error -xerror -y -i "$source_mp4" \
-        -vf "fps=10,scale=$PREVIEW_WIDTH:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=sierra2_4a" \
+        -vf "fps=$PREVIEW_FPS,scale=$PREVIEW_WIDTH:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=sierra2_4a" \
         "$palette_gif"; then
         die "ffmpeg palette conversion failed for $name"
     fi
@@ -216,9 +230,15 @@ for i in "${!scene_names[@]}"; do
 
     if [ "$render_preview" = true ]; then
         preview_mp4="$(render_scene "$name" "$class_name" -ql 480p15)"
+        validate_media "$preview_mp4" "$PREVIEW_SOURCE_WIDTH" "$PREVIEW_SOURCE_HEIGHT" "$PREVIEW_SOURCE_RATE"
+        source_ms=$validated_ms
         staged_gif="$STAGE/$name/$name.gif"
         optimize_gif "$name" "$preview_mp4" "$staged_gif"
         validate_media "$staged_gif" "$PREVIEW_WIDTH" "$PREVIEW_HEIGHT" "$PREVIEW_RATE"
+        drift_ms=$((validated_ms - source_ms))
+        if [ "${drift_ms#-}" -gt "$PREVIEW_TIMELINE_TOLERANCE_MS" ]; then
+            die "$name.gif lasts ${validated_ms} ms but its 480p15 render lasts ${source_ms} ms (allowed difference ${PREVIEW_TIMELINE_TOLERANCE_MS} ms)"
+        fi
     fi
 
     if [ "$render_full" = true ]; then

@@ -293,6 +293,21 @@ class RenderScriptTest(unittest.TestCase):
             self.render("--preview-only", "alpha", path=path), before
         )
 
+    def test_shortened_optimizer_output_is_not_published(self) -> None:
+        self.add_scene("alpha", ANIMATED_SCENE)
+        before = digest_tree(self.repo)
+        # Exits 0 with a valid GIF that keeps only the first three frames (0.3 s of 2 s).
+        shortening_gifsicle = (
+            "#!/bin/sh\n"
+            f'"{TOOLS["gifsicle"]}" "$@" || exit $?\n'
+            'for arg in "$@"; do out="$arg"; done\n'
+            f'"{TOOLS["gifsicle"]}" -b "$out" \'#0-2\'\n'
+        )
+        path = self.tool_path(replace={"gifsicle": shortening_gifsicle})
+        self.assert_failed_without_changes(
+            self.render("--preview-only", "alpha", path=path), before
+        )
+
     def test_probe_failure_keeps_previous_preview(self) -> None:
         self.add_scene("alpha", ANIMATED_SCENE)
         before = digest_tree(self.repo)
