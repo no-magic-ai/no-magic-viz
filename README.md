@@ -43,7 +43,7 @@ Rendering also needs these system tools on `PATH`:
 
 ## Rendering
 
-All rendering happens locally before push. CI only runs lint and syntax checks.
+Previews are rendered locally and committed. CI renders changed scenes to check them but does not commit its outputs (see [CI](#ci)).
 
 ```bash
 # All scenes (MP4 + GIF)
@@ -94,6 +94,19 @@ uv run --extra dev python -m unittest discover -s tests
 ```
 
 `mypy` resolves `scenes/` as its search path (`[tool.mypy]` in `pyproject.toml`), so `base` and `scene_microgpt` are checked as the top-level modules that scenes import at render time. The tests render small scenes with the real system tools listed above.
+
+## CI
+
+`.github/workflows/render.yml` runs on pushes and pull requests that touch scenes, scripts, tests, assets, `pyproject.toml`, `uv.lock` or workflows. On Ubuntu 24.04 with the locked environment on Python 3.12, it runs the [checks](#checks) and the render tests, then renders the selected scenes one at a time with `bash scripts/render.sh <name>` (MP4 and GIF).
+
+Scene selection compares the commit under test with:
+
+- a pull request: the merge base with its current base branch (retargeting the pull request re-runs the workflow against the new base);
+- a push: the previous tip of the branch, or, on the first push of a branch or after a force push that removed the previous tip, the merge base with the default branch.
+
+Every added or modified `scenes/scene_<name>.py` is selected. A change to `assets/`, `scenes/base.py`, `scripts/`, `pyproject.toml`, `uv.lock` or `.github/workflows/` also selects `microgpt` as a representative scene instead of re-rendering all scenes. CI installs LaTeX and `dvisvgm` only when a selected scene's source uses a LaTeX-backed Manim class; if that detection misses one, Manim fails and the job fails.
+
+The `rendered-scenes` artifact holds only `previews/<name>.gif` and `renders/<name>.mp4` for the scenes selected and rendered in that run, kept for 14 days. The job reads the repository with read-only permissions and uses no secrets.
 
 ## Adding a New Scene
 
