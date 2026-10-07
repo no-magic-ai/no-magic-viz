@@ -3,6 +3,7 @@ Scene: Autoregressive GPT
 Script: microgpt.py
 Description: Token-by-token next-token prediction — the core generation loop of GPT
 """
+
 import sys
 from pathlib import Path
 
@@ -12,11 +13,22 @@ from base import NM_BLUE, NM_GREEN, NM_GRID, NM_PRIMARY, NM_PURPLE, NM_TEXT, NM_
 from manim import *
 
 
-def make_token_box(text, color, fill_opacity=0.3, font_size=20, width=0.9, height=0.6):
+def make_token_box(
+    text: str,
+    color: str,
+    fill_opacity: float = 0.3,
+    font_size: int = 20,
+    width: float = 0.9,
+    height: float = 0.6,
+) -> VGroup:
     """Create a rounded box with a token label inside."""
     box = RoundedRectangle(
-        corner_radius=0.1, width=width, height=height,
-        color=color, fill_opacity=fill_opacity, stroke_width=1.5,
+        corner_radius=0.1,
+        width=width,
+        height=height,
+        color=color,
+        fill_opacity=fill_opacity,
+        stroke_width=1.5,
     )
     label = Text(text, font_size=font_size, color=NM_TEXT)
     return VGroup(box, label)
@@ -26,7 +38,7 @@ class GPTScene(NoMagicScene):
     title_text = "Autoregressive GPT"
     subtitle_text = "Next-token prediction, one step at a time"
 
-    def animate(self):
+    def animate(self) -> None:
         # === Step 1: Show the transformer block diagram ===
         block_label = Text("Transformer Block", font_size=22, color=NM_TEXT, weight=BOLD)
         block_label.to_edge(UP, buff=0.5)
@@ -39,10 +51,14 @@ class GPTScene(NoMagicScene):
         for name, color in zip(stages, stage_colors):
             box = VGroup(
                 RoundedRectangle(
-                    corner_radius=0.12, width=1.6, height=0.7,
-                    color=color, fill_opacity=0.2, stroke_width=1.5,
+                    corner_radius=0.12,
+                    width=1.6,
+                    height=0.7,
+                    color=color,
+                    fill_opacity=0.2,
+                    stroke_width=1.5,
                 ),
-                Text(name, font_size=18, color=color),
+                Text(name, font_size=18, color=NM_TEXT),
             )
             stage_boxes.add(box)
 
@@ -56,13 +72,16 @@ class GPTScene(NoMagicScene):
         )
 
         # Arrows between stages
-        arrows = VGroup()
-        for i in range(len(stage_boxes) - 1):
-            arrow = Arrow(
-                stage_boxes[i].get_right(), stage_boxes[i + 1].get_left(),
-                buff=0.08, color=NM_GRID, stroke_width=2,
+        arrows = [
+            Arrow(
+                stage_boxes[i].get_right(),
+                stage_boxes[i + 1].get_left(),
+                buff=0.08,
+                color=NM_GRID,
+                stroke_width=2,
             )
-            arrows.add(arrow)
+            for i in range(len(stage_boxes) - 1)
+        ]
 
         self.play(
             LaggedStart(*[GrowArrow(a) for a in arrows], lag_ratio=0.1),
@@ -113,7 +132,8 @@ class GPTScene(NoMagicScene):
 
             for j, (pl, ph) in enumerate(zip(prob_labels, prob_heights)):
                 bar = Rectangle(
-                    width=0.25, height=ph,
+                    width=0.25,
+                    height=ph,
                     color=NM_GREEN if ph == max(prob_heights) else NM_GRID,
                     fill_opacity=0.6 if ph == max(prob_heights) else 0.3,
                     stroke_width=1,
@@ -161,10 +181,12 @@ class GPTScene(NoMagicScene):
         loop_arrow = CurvedArrow(
             token_group[-1].get_top() + UP * 0.1,
             stage_boxes[0].get_bottom() + DOWN * 0.1,
-            color=NM_YELLOW, stroke_width=2, angle=-TAU / 4,
+            color=NM_YELLOW,
+            stroke_width=2,
+            angle=-TAU / 4,
         )
         repeat_text = Text("repeat", font_size=16, color=NM_YELLOW)
-        repeat_text.next_to(loop_arrow, RIGHT, buff=0.15)
+        repeat_text.next_to(loop_arrow.tip, LEFT, buff=0.12)
 
         self.play(Create(loop_arrow), FadeIn(repeat_text), run_time=0.9)
         self.wait(1.0)
@@ -172,7 +194,7 @@ class GPTScene(NoMagicScene):
         # === Step 5: Show final generated sequence highlighted ===
         result_box = SurroundingRectangle(token_group, color=NM_GREEN, buff=0.12, stroke_width=2)
         result_label = Text("thomas", font_size=24, color=NM_GREEN, weight=BOLD)
-        result_label.next_to(result_box, DOWN, buff=0.4)
+        result_label.next_to(context_label, DOWN, buff=0.25)
         self.play(Create(result_box), Write(result_label), run_time=0.9)
         self.wait(1.6)
 

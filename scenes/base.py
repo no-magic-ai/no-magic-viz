@@ -5,6 +5,7 @@ Every scene inherits NoMagicScene and overrides animate() with algorithm-specifi
 animation logic. Branded start/end frames and algorithm title card are handled
 by the base class.
 """
+
 from pathlib import Path
 
 from manim import *
@@ -38,14 +39,16 @@ class NoMagicScene(Scene):
     title_text: str = "Algorithm"
     subtitle_text: str = "one-liner description"
 
-    def construct(self):
-        self.camera.background_color = NM_BG
+    def construct(self) -> None:
+        if not isinstance(self.camera, Camera):
+            raise TypeError("NoMagicScene requires the Cairo renderer (manim --renderer=cairo)")
+        self.camera.background_color = ManimColor(NM_BG)
         self.show_start_frame()
         self.show_title()
         self.animate()
         self.show_end_frame()
 
-    def show_start_frame(self):
+    def show_start_frame(self) -> None:
         """Display the branded start frame PNG for 2.5 seconds, then fade out."""
         frame = ImageMobject(START_FRAME)
         frame.height = config.frame_height
@@ -53,7 +56,7 @@ class NoMagicScene(Scene):
         self.wait(2.0)
         self.play(FadeOut(frame), run_time=0.6)
 
-    def show_title(self):
+    def show_title(self) -> None:
         """Show the algorithm-specific title card over the dark background."""
         title = Text(self.title_text, font_size=48, color=NM_TEXT, weight=BOLD)
         subtitle = Text(self.subtitle_text, font_size=24, color=NM_PRIMARY)
@@ -62,12 +65,12 @@ class NoMagicScene(Scene):
         self.wait(1.5)
         self.play(FadeOut(title), FadeOut(subtitle), run_time=0.6)
 
-    def show_end_frame(self):
+    def show_end_frame(self) -> None:
         """Display the branded end frame PNG for 3 seconds."""
         frame = ImageMobject(END_FRAME)
         frame.height = config.frame_height
         self.play(FadeIn(frame), run_time=0.8)
         self.wait(2.5)
 
-    def animate(self):
+    def animate(self) -> None:
         raise NotImplementedError("Subclasses must implement animate()")
