@@ -30,13 +30,15 @@ WRONG = "#c0607a"
 LIGHT_BLUE = "#4fa3e0"
 
 # Provenance. Every model output and accuracy below is copied from the frozen, pre-registered S3
-# design-study run of the program this scene illustrates (no-magic 03-systems/microcot.py; seed
-# 42, CPython 3.12.8; reference stdout SHA-256
-# bd4614398dcf87248ed626cf30ec985e6d7b263f14b740a35c5eeb86b78fd480). The shipped program must
-# reproduce these values exactly; that reproduction is checked by independent qualification,
-# not by this scene. Differences shown (+0.104, +0.068) are plain arithmetic on the displayed
-# values. The three routes of 3+7+2+9 are the task's own arithmetic, not model output, and the
-# model diagram is schematic. Bar and curve heights are proportional to the printed accuracies.
+# design-study run of the prototype t3-design m9/feasibility/s3/s3_probe.py (seed 42, CPython
+# 3.12.8; reference stdout feasibility/s3/final/run1.stdout.txt, SHA-256
+# bd4614398dcf87248ed626cf30ec985e6d7b263f14b740a35c5eeb86b78fd480). no-magic
+# 03-systems/microcot.py ports that prototype; independent qualification of its two default runs
+# under CPython 3.12.8 reproduced these values exactly. No value here comes from a render-time
+# run. Differences shown (+0.104, +0.068) are plain arithmetic on the displayed values. The
+# opening screen's direct answer and three routes for 3+7+2+9 are gold training targets computed
+# from the task's own arithmetic, not model output; the model diagram is schematic. Bar and curve
+# heights are proportional to the printed accuracies.
 N_PARAMS = "17,345"
 # Sampled traces printed by the run's inspection section for the first and third test problems
 # (four samples each, drawn from the separate inspection stream, not the 40-sample vote).
@@ -48,7 +50,7 @@ SAMPLES_B = (("R960#0.", 0), ("L922#2.", 2), ("T998#8.", 8), ("L920#0.", 0))
 ACCURACY_BARS = (
     ("direct\ngreedy", 0.650, "0.650"),
     ("trace\ngreedy", 0.702, "0.702"),
-    ("one sample\nτ = 0.7", 0.639, "0.639"),
+    ("mean sample\nτ = 0.7\n20,000 draws", 0.639, "0.639"),
     ("best route L\n(post hoc)", 0.738, "0.738"),
     ("vote\nk = 40", 0.806, "0.806"),
 )
@@ -116,21 +118,22 @@ class CoTScene(NoMagicScene):
 
     def show_task(self) -> None:
         """Same problems, two training targets: answer directly, or write a route first."""
-        header = Text("Two arms, one task: sum of 4 digits mod 10", font_size=34, color=NM_TEXT)
+        header = Text("Training targets for one problem (sum mod 10)", font_size=34, color=NM_TEXT)
         header.to_edge(UP, buff=0.4)
         prompt = Text("3+7+2+9=", font_size=38, color=NM_TEXT, font="Monospace")
         prompt.move_to(LEFT * 4.8 + UP * 0.9)
         self.play(FadeIn(header), FadeIn(prompt), run_time=0.8)
 
         direct = VGroup(
-            Text("direct arm:", font_size=26, color=LIGHT_BLUE),
+            Text("direct-arm target:", font_size=26, color=LIGHT_BLUE),
             Text("1.", font_size=32, color=NM_GREEN, font="Monospace"),
         ).arrange(RIGHT, buff=0.3)
         direct.move_to(RIGHT * 0.6 + UP * 2.0)
         direct_arrow = Arrow(prompt.get_right(), direct.get_left(), buff=0.2, color=LIGHT_BLUE)
         self.play(GrowArrow(direct_arrow), FadeIn(direct), run_time=0.8)
 
-        # The three routes are the task's own arithmetic (all mod 10), used as training targets.
+        # The three routes are the task's own arithmetic (all mod 10): gold training targets that
+        # the trace arm learns to imitate, never decoder output.
         routes = VGroup(
             VGroup(trace_tokens("L021#1."), Text("(3+7) +2 +9", font_size=22, color=MUTED)),
             VGroup(trace_tokens("R181#1."), Text("(9+2) +7 +3", font_size=22, color=MUTED)),
@@ -140,14 +143,16 @@ class CoTScene(NoMagicScene):
             route.arrange(RIGHT, buff=0.45)
         routes.arrange(DOWN, buff=0.28, aligned_edge=LEFT)
         routes.move_to(RIGHT * 2.0 + DOWN * 0.55)
-        trace_label = Text("trace arm: route p1 p2 p3 # answer", font_size=26, color=NM_YELLOW)
+        trace_label = Text(
+            "trace-arm targets: route p1 p2 p3 # answer", font_size=26, color=NM_YELLOW
+        )
         trace_label.next_to(routes, UP, buff=0.3)
         trace_arrow = Arrow(prompt.get_right(), routes.get_left(), buff=0.2, color=NM_YELLOW)
         self.play(GrowArrow(trace_arrow), FadeIn(trace_label), run_time=0.7)
         self.play(LaggedStart(*[FadeIn(r) for r in routes], lag_ratio=0.3), run_time=1.5)
 
         note = Text(
-            "Decoders see only the prompt: every trace they print is model-written",
+            "Gold targets for training, not model output; all three routes are correct",
             font_size=24,
             color=NM_TEXT,
         )
@@ -223,9 +228,12 @@ class CoTScene(NoMagicScene):
         """Sample traces at temperature 0.7, read the digit after '#', count."""
         header = Text("Self-consistency: sample → parse → vote", font_size=34, color=NM_TEXT)
         header.to_edge(UP, buff=0.35)
-        caption = Text(
-            "4 printed samples at τ = 0.7 (the program votes over 40)", font_size=22, color=MUTED
-        )
+        caption = VGroup(
+            Text(
+                "Model-written samples: decoders see only the prompt", font_size=26, color=NM_TEXT
+            ),
+            Text("4 printed at τ = 0.7 (the vote uses 40)", font_size=24, color=NM_TEXT),
+        ).arrange(DOWN, buff=0.1)
         caption.next_to(header, DOWN, buff=0.2)
         self.play(FadeIn(header), FadeIn(caption), run_time=0.6)
 
@@ -268,9 +276,9 @@ class CoTScene(NoMagicScene):
         header = Text("500 held-out problems, seed 42", font_size=32, color=NM_TEXT)
         header.to_edge(UP, buff=0.3)
         source = Text(
-            "frozen design values; the program must reproduce them exactly",
-            font_size=20,
-            color=MUTED,
+            "design-study values, reproduced exactly by microcot.py",
+            font_size=24,
+            color=NM_TEXT,
         )
         source.next_to(header, DOWN, buff=0.12)
         self.play(FadeIn(header), FadeIn(source), run_time=0.6)
@@ -315,10 +323,10 @@ class CoTScene(NoMagicScene):
             x_range=(0, 4.5, 1),
             y_range=(0.6, 0.85, 0.05),
             x_length=8.5,
-            y_length=4.0,
+            y_length=3.2,
             axis_config={"color": MUTED, "include_tip": False},
         )
-        axes.move_to(DOWN * 0.35)
+        axes.move_to(UP * 0.25)
         y_labels = VGroup()
         for tick in (0.6, 0.7, 0.8):
             tick_label = Text(f"{tick:.1f}", font_size=22, color=MUTED)
@@ -349,12 +357,12 @@ class CoTScene(NoMagicScene):
         )
         self.play(Create(curve), FadeIn(dots), run_time=1.4)
         self.play(FadeIn(values), run_time=0.6)
-        cost = Text(
-            "k = 1 is one sample; each sample costs a full decode; flat after k ≈ 20",
-            font_size=22,
-            color=MUTED,
-        )
-        cost.to_edge(DOWN, buff=0.3)
+        cost = VGroup(
+            Text("k = 1: each problem's first sample (500 draws)", font_size=26, color=NM_TEXT),
+            Text("the 0.639 bar: mean over all 20,000 draws", font_size=26, color=NM_TEXT),
+            Text("each sample is a full decode; flat after k ≈ 20", font_size=24, color=MUTED),
+        ).arrange(DOWN, buff=0.1)
+        cost.to_edge(DOWN, buff=0.25)
         self.play(FadeIn(cost), run_time=0.6)
         self.wait(2.4)
         self.clear_all()
