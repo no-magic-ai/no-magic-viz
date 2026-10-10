@@ -31,14 +31,16 @@ LIGHT_BLUE = "#4fa3e0"
 
 # Provenance. Every model output and accuracy below is copied from the frozen, pre-registered S3
 # design-study run of the prototype t3-design m9/feasibility/s3/s3_probe.py (seed 42, CPython
-# 3.12.8; reference stdout feasibility/s3/final/run1.stdout.txt, SHA-256
+# 3.12.8 on Apple M1 Pro; reference stdout feasibility/s3/final/run1.stdout.txt, SHA-256
 # bd4614398dcf87248ed626cf30ec985e6d7b263f14b740a35c5eeb86b78fd480). no-magic
 # 03-systems/microcot.py ports that prototype; independent qualification of its two default runs
-# under CPython 3.12.8 reproduced these values exactly. No value here comes from a render-time
-# run. Differences shown (+0.104, +0.068) are plain arithmetic on the displayed values. The
-# opening screen's direct answer and three routes for 3+7+2+9 are gold training targets computed
-# from the task's own arithmetic, not model output; the model diagram is schematic. Bar and curve
-# heights are proportional to the printed accuracies.
+# under CPython 3.12.8 on Apple M1 Pro reproduced these values exactly. The values are claimed for
+# that pinned setup only: a GitHub Ubuntu CI run (CPython 3.12.15) differed slightly in the direct
+# arm (0.652, +0.050), with every trace and vote value identical. No value here comes from a
+# render-time run. Differences shown (+0.104, +0.068) are plain arithmetic on the displayed
+# values. The opening screen's direct answer and three routes for 3+7+2+9 are gold training
+# targets computed from the task's own arithmetic, not model output; the model diagram is
+# schematic. Bar and curve heights are proportional to the printed accuracies.
 N_PARAMS = "17,345"
 # Sampled traces printed by the run's inspection section for the first and third test problems
 # (four samples each, drawn from the separate inspection stream, not the 40-sample vote).
@@ -232,7 +234,9 @@ class CoTScene(NoMagicScene):
             Text(
                 "Model-written samples: decoders see only the prompt", font_size=26, color=NM_TEXT
             ),
-            Text("4 printed at τ = 0.7 (the vote uses 40)", font_size=24, color=NM_TEXT),
+            Text(
+                "4 printed at τ = 0.7 in the pinned run (vote uses 40)", font_size=24, color=NM_TEXT
+            ),
         ).arrange(DOWN, buff=0.1)
         caption.next_to(header, DOWN, buff=0.2)
         self.play(FadeIn(header), FadeIn(caption), run_time=0.6)
@@ -273,13 +277,16 @@ class CoTScene(NoMagicScene):
 
     def show_results(self) -> None:
         """Test-slice accuracies: the vote against greedy, single samples and the best route."""
-        header = Text("500 held-out problems, seed 42", font_size=32, color=NM_TEXT)
+        header = Text("500 held-out problems", font_size=32, color=NM_TEXT)
         header.to_edge(UP, buff=0.3)
-        source = Text(
-            "design-study values, reproduced exactly by microcot.py",
-            font_size=24,
-            color=NM_TEXT,
-        )
+        source = VGroup(
+            Text("pinned run: seed 42, CPython 3.12.8, Apple M1 Pro", font_size=24, color=NM_TEXT),
+            Text(
+                "design-study values, reproduced exactly by microcot.py",
+                font_size=22,
+                color=NM_TEXT,
+            ),
+        ).arrange(DOWN, buff=0.08)
         source.next_to(header, DOWN, buff=0.12)
         self.play(FadeIn(header), FadeIn(source), run_time=0.6)
 
@@ -315,7 +322,9 @@ class CoTScene(NoMagicScene):
 
     def show_vote_by_k(self) -> None:
         """More samples help, then saturate: vote accuracy by k against the greedy line."""
-        header = Text("Vote accuracy by number of samples k", font_size=32, color=NM_TEXT)
+        header = Text(
+            "Vote accuracy by number of samples k (same pinned run)", font_size=30, color=NM_TEXT
+        )
         header.to_edge(UP, buff=0.4)
         self.play(FadeIn(header), run_time=0.6)
 
@@ -387,7 +396,7 @@ class CoTScene(NoMagicScene):
             (
                 "Partial faithfulness: later steps follow a\ncorrupted first step only ~30-34% of the time",
                 "Supervised scratchpads (Nye et al.), not\nWei et al.'s prompting of a ~100B model",
-                f"Toy: {N_PARAMS}-parameter MLP, one seed,\ntest slice skewed to repeated digits",
+                f"Toy: {N_PARAMS}-parameter MLP, one seed on one\nhost, test slice skewed to repeated digits",
             ),
             font_size=26,
         ).move_to(DOWN * 0.3)
